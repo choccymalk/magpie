@@ -1,0 +1,205 @@
+package apcsa.lab3;
+
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+import java.io.*;
+import java.net.*;
+
+import com.google.gson.*;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.*;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import com.sun.jdi.event.BreakpointEvent;
+
+public class Magpie {
+
+    private static final HttpClient client = HttpClient.newHttpClient();
+    private static final List<String> history = new ArrayList<>();
+
+    public static void main(String[] args) {
+        /*
+         * try {
+         * System.out.println(searchWeb("random access memory"));
+         * } catch (Exception e) {
+         * System.out.println("Error: " + e.getMessage());
+         * }
+         */
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.print("You: ");
+            String message = scanner.nextLine();
+            if (message.equalsIgnoreCase("exit"))
+                break;
+            history.add("{\"role\":\"user\",\"content\":\"" + message + "\"}");
+            try {
+                sendMessage();
+            } catch (Exception e) {
+                System.out.println("Error communicating with the server: " + e.getMessage());
+            }
+        }
+    }
+
+    public static void sendMessage() throws Exception {
+        Gson gson = new Gson();
+        List<Message> messagesList = new ArrayList<>();
+        Message systemMessage = new Message();
+        systemMessage.role = "system";
+        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, inform them that you must search the web for that. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later. Do not add newline characters in your response, and always keep your responses on a single line.";
+        messagesList.add(systemMessage);
+
+        for (String msg : history) {
+            try {
+                Message usrMsg = gson.fromJson(msg, Message.class);
+                messagesList.add(usrMsg);
+            } catch (JsonSyntaxException e) {
+                System.out.println("Malformed JSON: " + msg);
+            }
+        }
+
+        Request request = new Request();
+        request.model = "qwen2.5:14b";
+        request.messages = messagesList;
+        request.stream = false;
+        String jsonPayload = gson.toJson(request);
+
+        HttpRequest postRequest = HttpRequest.newBuilder()
+                .uri(URI.create("http://cucumber:11434/api/chat"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .build();
+
+        try {
+            HttpResponse<String> postResponse = client.send(postRequest, HttpResponse.BodyHandlers.ofString());
+            if (postResponse.statusCode() != 200) {
+                System.out.println("Error: Received status code " + postResponse.statusCode());
+                return;
+            }
+
+            // Parse the response
+            System.out.println(postResponse.body());
+            JsonReader reader = new JsonReader(new StringReader(postResponse.body()));
+            reader.setStrictness(Strictness.LENIENT);
+            Response responseObject = gson.fromJson(reader, Response.class);
+            if (responseObject.message.content.contains("!webquery")) {
+                String query = responseObject.message.content.substring(responseObject.message.content.indexOf("y!") + 1,
+                responseObject.message.content.indexOf("!end"));
+                String searchResult = searchWeb(query);
+                history.add("{\"role\":\"user\",\"content\":\"" + searchResult + "\"}");
+                System.out.println("Magpie is searching the web.");
+                sendMessage();
+            } else {
+                if (responseObject.message != null && responseObject.message.content != null
+                        && !responseObject.message.content.equals("") && responseObject.done != false) {
+                    history.add("{\"role\":\"assistant\",\"content\":\"" + responseObject.message.content + "\"}");
+                    System.out.println("Magpie: " + responseObject.message.content);
+                }
+            }
+
+            StringBuilder fullResponse = new StringBuilder();
+            while (!responseObject.done) {
+                if (responseObject.message != null && responseObject.message.content != null) {
+                    fullResponse.append(responseObject.message.content);
+                }
+                responseObject = gson.fromJson(postResponse.body(), Response.class); // Update with the next streamed
+                                                                                     // response
+            }
+
+            // Add the final response to history
+            // history.add("{\"role\":\"assistant\",\"content\":\"" +
+            // fullResponse.toString() + "\"}");
+
+        } catch (IOException | InterruptedException | IllegalStateException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    static class Request {
+        public String model;
+        public List<Message> messages;
+        public boolean stream;
+    }
+
+    static class Message {
+        public String role;
+        public String content;
+    }
+
+    static class Response {
+        public String model;
+        public String created_at;
+        public boolean done;
+        public Message message;
+        public String done_reason;
+        public float total_duration;
+        public float load_duration;
+        public float prompt_eval_count;
+        public float primt_eval_duration;
+        public float eval_count;
+        public float eval_duration;
+
+    }
+
+    public static String searchWeb(String query) throws Exception {
+        String bingSearchHTML = getHTML("https://www.bing.com/search?q=" + query.replaceAll("\\s+", "+"));
+        writeToFile("bing_search_html.html", bingSearchHTML);
+        Document doc = Jsoup.parse(bingSearchHTML);
+        Element cite = doc.getElementsByClass("tilk").first();
+        Element citeURL = cite.getElementsByTag("a").first();
+        String citeURL2 = cite.attr("href");
+        System.out.println(citeURL2);
+        if (citeURL2.startsWith("http")) {
+            System.out.println("Searching: " + citeURL2);
+            String searchedWikipediaHTML = getHTML(citeURL2); // not always wikipedia, i just didn't want to change the
+                                                                 // variable name
+            writeToFile("searched_wikipedia_html.html", searchedWikipediaHTML);
+            Document searchedWikipediaDoc = Jsoup.parse(searchedWikipediaHTML);
+            return searchedWikipediaDoc.getElementsByTag("body").text().replaceAll("[^\\x00-\\x7F]", "").replaceAll("\"", "\\\"");
+        } else {
+            return "No results found";
+        }
+    }
+    public static String stripQuotes(String str) {
+        return str.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", "");
+    }
+
+    public static String getHTML(String urlToRead) throws Exception {
+        StringBuilder result = new StringBuilder();
+        URL url = new URL(urlToRead);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(conn.getInputStream()))) {
+            for (String line; (line = reader.readLine()) != null;) {
+                result.append(line);
+            }
+        }
+        return result.toString();
+    }
+
+    public static void writeToFile(String filename, String content) {
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(filename));
+            writer.write(content);
+            writer.close();
+        } catch (IOException e) {
+            System.out.println("An error occurred.");
+        }
+    }
+   
+}
+/*
+ * writeToFile("bing_search_html.txt", bingSearchHTML);
+ * return doc.select("title").text() + bingSearchHTML;
+ * //title.text() + "\n" + link.attr("href");
+ */
