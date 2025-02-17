@@ -17,9 +17,11 @@ repositories {
 }
 
 dependencies {
-    implementation files('/Users/bentley/APCSA-Lab3/app/src/main/java/app/src/main/java/apcsa/lab3/json-simple-1.1.jar')
+    //implementation files('/Users/bentley/APCSA-Lab3/app/src/main/java/app/src/main/java/apcsa/lab3/json-simple-1.1.jar')
     implementation 'com.google.code.gson:gson:2.12.1'
     implementation 'org.jsoup:jsoup:1.17.2'
+    implementation 'net.dankito.readability4j:readability4j:1.0.8'
+
     // Use JUnit Jupiter for testing.
     testImplementation libs.junit.jupiter
 

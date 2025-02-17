@@ -8,23 +8,28 @@ import java.util.List;
 import java.util.Scanner;
 import java.io.*;
 import java.net.*;
-
+import net.dankito.readability4j.*;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.*;
-
+import javax.swing.JFrame;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
 import com.sun.jdi.event.BreakpointEvent;
 
 public class Magpie {
-
+    public static String sourceURL;
+    public static boolean searchedWeb = false;
     private static final HttpClient client = HttpClient.newHttpClient();
-    private static final List<String> history = new ArrayList<>();
-
+    public static final List<String> history = new ArrayList<>();
     public static void main(String[] args) {
         /*
          * try {
@@ -33,7 +38,10 @@ public class Magpie {
          * System.out.println("Error: " + e.getMessage());
          * }
          */
-        Scanner scanner = new Scanner(System.in);
+        UI ui = new UI();
+        ui.main(null);
+
+        /*Scanner scanner = new Scanner(System.in);
         while (true) {
             System.out.print("You: ");
             String message = scanner.nextLine();
@@ -45,7 +53,7 @@ public class Magpie {
             } catch (Exception e) {
                 System.out.println("Error communicating with the server: " + e.getMessage());
             }
-        }
+        }*/
     }
 
     public static void sendMessage() throws Exception {
@@ -53,7 +61,7 @@ public class Magpie {
         List<Message> messagesList = new ArrayList<>();
         Message systemMessage = new Message();
         systemMessage.role = "system";
-        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, inform them that you must search the web for that. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later. Do not add newline characters in your response, and always keep your responses on a single line.";
+        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, you must search the web. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later.";
         messagesList.add(systemMessage);
 
         for (String msg : history) {
@@ -94,12 +102,17 @@ public class Magpie {
                 responseObject.message.content.indexOf("!end"));
                 String searchResult = searchWeb(query);
                 history.add("{\"role\":\"user\",\"content\":\"" + searchResult + "\"}");
+                searchedWeb = true;
                 System.out.println("Magpie is searching the web.");
+                UI.appendTextToLabel("Magpie is searching the web.");
+                UI.appendTextToLabel("Source: " + Magpie.sourceURL);
                 sendMessage();
             } else {
                 if (responseObject.message != null && responseObject.message.content != null
                         && !responseObject.message.content.equals("") && responseObject.done != false) {
                     history.add("{\"role\":\"assistant\",\"content\":\"" + responseObject.message.content + "\"}");
+                    searchedWeb = false;
+                    UI.appendTextToLabel("Magpie: " + responseObject.message.content.replaceAll("(\r\n|\n)", "<br />"));
                     System.out.println("Magpie: " + responseObject.message.content);
                 }
             }
@@ -158,17 +171,19 @@ public class Magpie {
         System.out.println(citeURL2);
         if (citeURL2.startsWith("http")) {
             System.out.println("Searching: " + citeURL2);
+            sourceURL = citeURL2;
             String searchedWikipediaHTML = getHTML(citeURL2); // not always wikipedia, i just didn't want to change the
                                                                  // variable name
             writeToFile("searched_wikipedia_html.html", searchedWikipediaHTML);
-            Document searchedWikipediaDoc = Jsoup.parse(searchedWikipediaHTML);
-            return searchedWikipediaDoc.getElementsByTag("body").text().replaceAll("[^\\x00-\\x7F]", "").replaceAll("\"", "\\\"");
+            String rawHTML = readability4j(searchedWikipediaHTML, citeURL2);
+            String parsedHTML = Jsoup.parse(rawHTML).text();
+            return stripQuotes(parsedHTML);
         } else {
             return "No results found";
         }
     }
     public static String stripQuotes(String str) {
-        return str.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", "");
+        return str.replace("\"", "");
     }
 
     public static String getHTML(String urlToRead) throws Exception {
@@ -196,7 +211,11 @@ public class Magpie {
             System.out.println("An error occurred.");
         }
     }
-   
+   public static String readability4j(String html, String url) {
+        Readability4J readability4J = new Readability4J(url, html);
+        Article article = readability4J.parse();
+        return article.getContent();
+    }
 }
 /*
  * writeToFile("bing_search_html.txt", bingSearchHTML);

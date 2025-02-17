@@ -1,4 +1,4 @@
-package app.src.main.java.apcsa.lab3.apcsa.lab3;
+package app.src.main.java.apcsa.lab3;
 import java.util.HashMap;
 import java.util.Map;
 public class SimpleJSONParserOLD {
