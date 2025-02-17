@@ -1,120 +1,116 @@
 package apcsa.lab3;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.awt.Toolkit;
+
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
 import javax.swing.JTextField;
-import java.awt.Container;
-import java.awt.BorderLayout;
-import javax.swing.JButton; 
+import javax.swing.ScrollPaneConstants;
+import java.awt.Insets;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
-import javax.swing.BoxLayout; 
-import javax.swing.Box; 
-import javax.swing.border.EmptyBorder; 
-import java.awt.Insets; 
-import java.awt.Dimension; 
+
 public class UI extends JPanel implements ActionListener {
     static String html = "<html><body style='width: %1spx'>%1s";
-    
+
     // JTextField
     static JTextField textField;
- 
+
     // JFrame
     static JFrame frame;
- 
+
     // JButton
     static JButton button;
-    // JPanel
+    //.JPanel
     static JPanel p;
+    static JPanel messagePanel;  // Panel to hold all message labels
+    static JScrollPane scrollPane;
     static int yPos = 0;
+
     // default constructor
-    UI()
-    {
+    UI() {
     }
- 
-    // main class
-    public void main(String[] args)
-    {
-        
-        // create a new frame to store text field and button
+
+    public void main(String[] args) {
         frame = new JFrame("Magpie");
-        JScrollBar scrollbar = new JScrollBar();
-        scrollbar.setPreferredSize(new Dimension(5, 400));
-        frame.add(scrollbar);
-        frame.pack();
-
-        // create a new button
-        button = new JButton("submit");
- 
-        // create a object of the text class
-        UI te = new UI();
- 
-        // addActionListener to button
-        button.addActionListener(te);
- 
-        // create a object of JTextField with 16 columns
-        textField = new JTextField(16);
-
-        // create a panel to add buttons and textfield
-        p = new JPanel();
-
-        //BoxLayout boxlayout = new BoxLayout(p, BoxLayout.Y_AXIS); 
-  
-        // to set the box layout 
-        //p.setLayout(boxlayout); 
-        
-        p.setBorder(new EmptyBorder(new Insets(0, 150, 600, 150))); 
-        textField.setMaximumSize(new Dimension(500, 50));
-        setLayout(new BorderLayout());
-        // add buttons and textfield to panel
-        //label.setLocation(100,100);
-        p.add(textField, BorderLayout.NORTH);
-        p.add(button, BorderLayout.SOUTH);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        // add panel to frame
-        frame.add(p);
- 
-        // set the size of frame
-        frame.setSize(600, 600);
- 
-        frame.show();
+        // Create panels
+        p = new JPanel();
+        messagePanel = new JPanel();
+        messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
+
+        // Create components
+        button = new JButton("submit");
+        textField = new JTextField(16);
+
+        // Setup scroll pane
+        scrollPane = new JScrollPane(messagePanel,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setPreferredSize(new Dimension(600, 500));
+        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        
+        p.setLayout(new BorderLayout());
+        p.add(textField, BorderLayout.NORTH);
+        p.add(button, BorderLayout.NORTH);
+        p.add(scrollPane, BorderLayout.CENTER);
+
+        // Set preferred size for better initial display
+        scrollPane.setPreferredSize(new Dimension(500, 300));
+        messagePanel.setOpaque(true);
+        // Add components to main panel (p)
+        p.setLayout(new BorderLayout());
+        p.add(textField, BorderLayout.NORTH);
+        p.add(button, BorderLayout.NORTH);
+        p.add(scrollPane, BorderLayout.CENTER);
+        textField.setPreferredSize(new Dimension(200, 30));
+        button.setPreferredSize(new Dimension(100, 30));
+        // Add action listener to button
+        button.addActionListener(this);
+        p.setLayout(new FlowLayout());
+        scrollPane.setPreferredSize(new Dimension(500, 500));
+        // Set frame properties
+        frame.setContentPane(p);
+        p.setPreferredSize(new Dimension(600, 600));
+        frame.pack();
+        frame.setVisible(true);
+
+        // Initial setup - add empty label to ensure proper scrolling behavior
+        JLabel emptyLabel = new JLabel("");
+        messagePanel.add(emptyLabel);
     }
+
     public static void appendTextToLabel(String text) {
-        //label.setText("<html><br>" + label.getText() + "<br>" + text + "</html>");
-        //JPanel newPanel = new JPanel();
-        String textFormatted = String.format(html, 400, text);
+        String textFormatted = String.format(html, 600, text);
         JLabel newLabel = new JLabel(textFormatted);
-        newLabel.setMaximumSize(new Dimension(150, 50));
-        yPos += 20;
-        p.setLocation(0, yPos);
-        p.add(newLabel);
-        frame.revalidate();
+        newLabel.setOpaque(true);
+        messagePanel.add(newLabel);
+        messagePanel.updateUI();
     }
-    // if the button is pressed
-    public void actionPerformed(ActionEvent e)
-    {
+
+    public void actionPerformed(ActionEvent e) {
         String s = e.getActionCommand();
         if (s.equals("submit")) {
-            /*// set the text of the label to the text of the field
-            label.setText(textField.getText());
-            */
-            // set the text of field to blank
-            //textField.setText("");
-            String message = textField.getText();
-            if (message.equalsIgnoreCase("exit"))
-                System.exit(0);
+            String message = textField.getText().trim();
+            if (!message.isEmpty()) {
                 Magpie.history.add("{\"role\":\"user\",\"content\":\"" + message + "\"}");
-            try {
-                appendTextToLabel("You: " + message);
-                Magpie.sendMessage();
-            } catch (Exception except) {
-                System.out.println("Error communicating with the server: " + except.getMessage());
+                try {
+                    appendTextToLabel("You: " + message);
+                    Magpie.sendMessage();
+                    textField.setText("");
+                } catch (Exception ex) {
+                    System.out.println("Error communicating with the server: " + ex.getMessage());
+                }
             }
         }
     }
