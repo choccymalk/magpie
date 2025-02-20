@@ -4,26 +4,20 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Scanner;
+import java.util.Map;
 import java.io.*;
 import java.net.*;
 import net.dankito.readability4j.*;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.*;
-import javax.swing.JFrame;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import com.sun.jdi.event.BreakpointEvent;
+
+import java.util.Base64;
+import java.util.Base64.Encoder;
 
 public class Magpie {
     public static String sourceURL;
@@ -31,6 +25,12 @@ public class Magpie {
     private static final HttpClient client = HttpClient.newHttpClient();
     public static final List<String> history = new ArrayList<>();
     public static void main(String[] args) {
+        try {
+            decodeBase64ToFile("generatedimage.png",generateImage("a dog"));
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
         /*
          * try {
          * System.out.println(searchWeb("random access memory"));
@@ -61,7 +61,7 @@ public class Magpie {
         List<Message> messagesList = new ArrayList<>();
         Message systemMessage = new Message();
         systemMessage.role = "system";
-        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, you must search the web. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later.";
+        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, you must search the web. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later. You can generate images. To generate an image, say '!imagequery! description !endimagequery!', where description is a detailed description of the image. If image generation was successful, the user will respond with 'Generation Successful.' If image generation fails, the user will respond with 'Generation Failed.'" ;
         messagesList.add(systemMessage);
 
         for (String msg : history) {
@@ -107,6 +107,11 @@ public class Magpie {
                 UI.appendTextToLabel("Magpie is searching the web.");
                 UI.appendTextToLabel("Source: " + Magpie.sourceURL);
                 sendMessage();
+            } else if (responseObject.message.content.contains("!imagequery")) {
+                String query = responseObject.message.content.substring(responseObject.message.content.indexOf("y!") + 1,
+                responseObject.message.content.indexOf("!end"));
+                String imageResult = generateImage(query);
+
             } else {
                 if (responseObject.message != null && responseObject.message.content != null
                         && !responseObject.message.content.equals("") && responseObject.done != false) {
@@ -159,6 +164,99 @@ public class Magpie {
         public float eval_count;
         public float eval_duration;
 
+    }
+
+    static class ImageRequest {
+        public String prompt;
+        public String steps;
+        public String sampler_name;
+        public String scheduler; 
+    }
+
+    static class image {
+        public String image;
+    }
+
+    public static void decodeBase64ToFile(String base64String, String filePath) {
+        try {
+            byte[] decodedBytes = Base64.getDecoder().decode(base64String);
+            FileOutputStream fos = new FileOutputStream(filePath);
+            fos.write(decodedBytes);
+            fos.close();
+            System.out.println("File saved successfully to: " + filePath);
+        } catch (IOException e) {
+            System.err.println("Error saving file: " + e.getMessage());
+        }
+    }
+
+    public static String generateImage(String description) throws IOException {
+        // Prepare JSON request body
+        Map<String, String> jsonMap = new HashMap<>();
+        jsonMap.put("prompt", description);
+        jsonMap.put("steps", "10");
+        jsonMap.put("sampler_name", "Euler A");
+        jsonMap.put("scheduler", "Automatic");
+        Gson gson = new Gson();
+        String jsonBody = gson.toJson(jsonMap);
+        
+        // Build POST request
+        HttpRequest postRequest = HttpRequest.newBuilder()
+                .uri(URI.create("http://zucchini:7860/sdapi/v1/txt2img"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+        
+        try {
+            HttpResponse<String> postResponse = client.send(postRequest, HttpResponse.BodyHandlers.ofString());
+            if (postResponse.statusCode() != 200) {
+                System.out.println("Error: Received status code " + postResponse.statusCode());
+                return "Generation Failed.";
+            }
+
+            String responseBody = postResponse.body();
+            System.out.println(responseBody);
+
+            // Parse the JSON response to determine its type
+            JsonElement jsonElement = JsonParser.parseString(responseBody);
+            if (jsonElement.isJsonObject() && jsonElement.getAsJsonObject().has("images")) {
+                // Successful response: parse into ImageResponse
+                ImageResponse imageResponse = gson.fromJson(responseBody, ImageResponse.class);
+                if (imageResponse.images != null && !imageResponse.images.isEmpty()) {
+                    return imageResponse.images.get(0); // Return first image string
+                } else {
+                    System.out.println("Error: No images found in response.");
+                    return "Generation Failed.";
+                }
+            } else if (jsonElement.isJsonObject() && jsonElement.getAsJsonObject().has("detail")) {
+                // Validation error response: parse into ErrorResponse
+                ErrorResponse errorResponse = gson.fromJson(responseBody, ErrorResponse.class);
+                System.out.println("Validation error: " + errorResponse.detail);
+                return "Generation Failed.";
+            } else {
+                System.out.println("Unknown response format.");
+                return "Generation Failed.";
+            }
+        } catch (IOException | InterruptedException | IllegalStateException e) {
+            System.out.println("Error: " + e.getMessage());
+            return "Generation Failed.";
+        }
+    }
+    
+    // Helper classes to represent the response JSON
+    static class ImageResponse {
+        List<String> images;
+        Map<String, Object> parameters;
+        String info;
+    }
+    
+    static class ErrorResponse {
+        List<ErrorDetail> detail;
+    }
+    
+    static class ErrorDetail {
+        List<Object> loc;
+        String msg;
+        String type;
     }
 
     public static String searchWeb(String query) throws Exception {
