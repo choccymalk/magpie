@@ -25,12 +25,7 @@ public class Magpie {
     private static final HttpClient client = HttpClient.newHttpClient();
     public static final List<String> history = new ArrayList<>();
     public static void main(String[] args) {
-        try {
-            decodeBase64ToFile("generatedimage.png",generateImage("a dog"));
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
+
         /*
          * try {
          * System.out.println(searchWeb("random access memory"));
@@ -61,7 +56,7 @@ public class Magpie {
         List<Message> messagesList = new ArrayList<>();
         Message systemMessage = new Message();
         systemMessage.role = "system";
-        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, you must search the web. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later. You can generate images. To generate an image, say '!imagequery! description !endimagequery!', where description is a detailed description of the image. If image generation was successful, the user will respond with 'Generation Successful.' If image generation fails, the user will respond with 'Generation Failed.'" ;
+        systemMessage.content = "You are Magpie, a helpful assistant. You should respond to the user's question in a way that is as helpful and informative as possible. If the user asks about recent events, you must search the web. To search the web, say '!webquery! question !endwebquery!', where question is your query. The user will respond with the result from the query, summarize the response, no matter the length. Should the search fail, 'No results found' will be returned, if this happens, inform the user that there was an error and that they should try again later. You can generate images. To generate an image, say '!imagequery! description !endimagequery!', where description is a detailed description of the image. If image generation was successful, the image will be displayed and the user will respond with 'Generation Successful.' If image generation fails, the user will respond with 'Generation Failed.'" ;
         messagesList.add(systemMessage);
 
         for (String msg : history) {
@@ -111,7 +106,10 @@ public class Magpie {
                 String query = responseObject.message.content.substring(responseObject.message.content.indexOf("y!") + 1,
                 responseObject.message.content.indexOf("!end"));
                 String imageResult = generateImage(query);
-
+                history.add("{\"role\":\"user\",\"content\":\"" + imageResult + "\"}");
+                UI.appendTextToLabel("Magpie is creating an image, result will be saved to image.png.");
+                UI.appendTextToLabel("<html><img height='256' width='256' src='file:///C:\\Users\\Bentley\\Documents\\GitHub\\magpie\\image.png'/></html>");
+                sendMessage();
             } else {
                 if (responseObject.message != null && responseObject.message.content != null
                         && !responseObject.message.content.equals("") && responseObject.done != false) {
@@ -193,9 +191,11 @@ public class Magpie {
         // Prepare JSON request body
         Map<String, String> jsonMap = new HashMap<>();
         jsonMap.put("prompt", description);
-        jsonMap.put("steps", "10");
+        jsonMap.put("negative_prompt", "lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature");
+        jsonMap.put("steps", "20");
         jsonMap.put("sampler_name", "Euler A");
         jsonMap.put("scheduler", "Automatic");
+        jsonMap.put("sd_model_checkpoint", "cyberrealisticRevamp_v32.safetensors [fe9b443031]");
         Gson gson = new Gson();
         String jsonBody = gson.toJson(jsonMap);
         
@@ -214,7 +214,6 @@ public class Magpie {
             }
 
             String responseBody = postResponse.body();
-            System.out.println(responseBody);
 
             // Parse the JSON response to determine its type
             JsonElement jsonElement = JsonParser.parseString(responseBody);
@@ -222,7 +221,10 @@ public class Magpie {
                 // Successful response: parse into ImageResponse
                 ImageResponse imageResponse = gson.fromJson(responseBody, ImageResponse.class);
                 if (imageResponse.images != null && !imageResponse.images.isEmpty()) {
-                    return imageResponse.images.get(0); // Return first image string
+                    String base64image = imageResponse.images.get(0);
+                    writeToFile("base64image.txt", base64image);
+                    decodeBase64ToFile(base64image, "image.png");
+                    return "Generation Successful."; // Return first image string
                 } else {
                     System.out.println("Error: No images found in response.");
                     return "Generation Failed.";
