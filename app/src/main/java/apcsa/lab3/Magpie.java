@@ -240,7 +240,7 @@ public class Magpie {
             }
         } catch (IOException | InterruptedException | IllegalStateException e) {
             System.out.println("Error: " + e.getMessage());
-            return "Generation Failed.";
+            return "Generation Failed. The error was: " + e.getMessage();
         }
     }
     
